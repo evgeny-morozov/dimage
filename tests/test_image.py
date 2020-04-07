@@ -29,8 +29,9 @@ def test_make_image():
             image.make(image_file.name)
 
             # check total size
+            MiB = 1024**2
             image_size = getsize(image_file.name)
-            assert image_size == (1 + 57 + 100) * 1024
+            assert image_size == 3 * MiB
 
             # check mbr contents
             result = subprocess.run(['sfdisk', '-d', image_file.name],
@@ -47,17 +48,17 @@ def test_make_image():
             ]
 
             assert part_lines == [
-                b'start=           2, size=         114, type=83',
-                b'start=         116, size=         200, type=83'
+                b'start=        2048, size=        2048, type=83',
+                b'start=        4096, size=        2048, type=83'
             ]
 
             # check partitions
             image_data = image_file.file.read()
-            part1_data = image_data[1 * 1024: 58 * 1024]
-            part2_data = image_data[58 * 1024: 158 * 1024]
+            part1_data = image_data[1 * MiB: 2 * MiB]
+            part2_data = image_data[2 * MiB: 3 * MiB]
 
-            assert len(part1_data) == 57 * 1024
-            assert len(part2_data) == 100 * 1024
+            assert len(part1_data) == MiB
+            assert len(part2_data) == MiB
 
             with NamedTemporaryFile() as part1_file:
                 part1_file.file.write(part1_data)

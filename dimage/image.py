@@ -1,6 +1,6 @@
 from tempfile import NamedTemporaryFile
 from .partition import Partition
-from typing import List
+from typing import List, BinaryIO
 import subprocess
 
 
@@ -12,7 +12,7 @@ class MakeImageError(Exception):
 class Image(object):
     def __init__(self,
                  partitions: List[Partition],
-                 mbr_size: int = 1,
+                 mbr_size: int = 1024,
                  io_block_size: int = 1024):
         self.partitions = partitions
         self.mbr_size = mbr_size
@@ -32,14 +32,22 @@ class Image(object):
             with NamedTemporaryFile() as partition_file:
                 partition.make(partition_file.name)
                 self.append(partition_file.file, image_file)
+                self.pad(image_file)
 
     def fill_mbr(self, file):
         commands = 'label: dos\n\n'
         start = self.mbr_size
 
         for partition in self.partitions:
-            commands += f'start= { start }k, size= { partition.size }k, type= 83\n'
-            start += partition.size
+            partition_size = partition.size
+
+            remainder = partition_size % 1024
+            if remainder > 0:
+                padding_size = 1024 - remainder
+                partition_size += padding_size
+
+            commands += f'start= { start }k, size= { partition_size }k, type= 83\n'
+            start += partition_size
 
         sfdisk_input = commands.encode()
 
@@ -50,7 +58,7 @@ class Image(object):
         except subprocess.CalledProcessError as e:
             raise MakeImageError(e.stderr.decode())
 
-    def append(self, from_file, to_file):
+    def append(self, from_file: BinaryIO, to_file: BinaryIO) -> None:
         from_file.seek(0)
         to_file.seek(0, 2)
 
@@ -60,3 +68,15 @@ class Image(object):
                 break
             to_file.write(block)
         pass
+
+    @staticmethod
+    def pad(file: BinaryIO) -> None:
+        file.seek(0, 2)
+        file_size = file.tell()
+        remainder_size = file_size % 1024**2
+        if remainder_size > 0:
+            padding_size = 1024**2 - remainder_size
+            file.write(bytes(padding_size))
+
+
+
