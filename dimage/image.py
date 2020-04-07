@@ -1,4 +1,5 @@
-from tempfile import NamedTemporaryFile
+import os.path
+from tempfile import TemporaryDirectory
 from .partition import Partition
 from typing import List, BinaryIO
 import subprocess
@@ -18,36 +19,56 @@ class Image(object):
         self.mbr_size = mbr_size
         self.io_block_size = io_block_size * 1024
 
-    def make(self, file: str):
+        self.kib = 1024
+        self.partition_files = []
+
+    def make(self, file: str) -> None:
         with open(file, 'wb') as image_file:
-            self.make_mbr(image_file)
-            self.make_partitions(image_file)
-            self.fill_mbr(file)
+            with TemporaryDirectory() as partitions_dir:
+                self.make_mbr(image_file)
+                self.make_partitions(image_file, partitions_dir)
+                self.fill_mbr(file)
+                self.write_partitions(image_file, partitions_dir)
 
-    def make_mbr(self, image_file):
-        image_file.write(bytes(self.mbr_size * 1024))
+    def make_mbr(self, image_file: BinaryIO) -> None:
+        image_file.write(bytes(self.mbr_size * self.kib))
 
-    def make_partitions(self, image_file):
-        for partition in self.partitions:
-            with NamedTemporaryFile() as partition_file:
-                partition.make(partition_file.name)
-                self.append(partition_file.file, image_file)
-                self.pad(image_file)
+    def make_partitions(self, image_file: BinaryIO, partitions_dir: str) -> None:
+        start = self.mbr_size
+
+        for i, partition in enumerate(self.partitions):
+            partition_file_name = os.path.join(partitions_dir, f'partition{ i }')
+            partition.make(partition_file_name)
+            partition.start = start
+
+            # calculate padding to 1 MiB
+            remainder = partition.size % 1024
+            if remainder > 0:
+                padding_size = 1024 - remainder
+            else:
+                padding_size = 0
+
+            #
+            full_size = partition.size + padding_size
+            start += full_size
+
+            image_file.write(bytes(full_size * self.kib))
+
+        # Extra sector to avoid "All space for primary partitions is in use" error
+        image_file.write(bytes(1024))
+        image_file.flush()
+
+    def write_partitions(self, image_file, partitions_dir):
+        for i, partition in enumerate(self.partitions):
+            partition_file_name = os.path.join(partitions_dir, f'partition{ i }')
+            with open(partition_file_name, 'rb') as partition_file:
+                self.write_file_with_offset(image_file, partition.start * self.kib, partition_file)
 
     def fill_mbr(self, file):
         commands = 'label: dos\n\n'
-        start = self.mbr_size
 
         for partition in self.partitions:
-            partition_size = partition.size
-
-            remainder = partition_size % 1024
-            if remainder > 0:
-                padding_size = 1024 - remainder
-                partition_size += padding_size
-
-            commands += f'start= { start }k, size= { partition_size }k, type= 83\n'
-            start += partition_size
+            commands += f'start= { partition.start }k, size= { partition.size }k, type= 83\n'
 
         sfdisk_input = commands.encode()
 
@@ -58,25 +79,16 @@ class Image(object):
         except subprocess.CalledProcessError as e:
             raise MakeImageError(e.stderr.decode())
 
-    def append(self, from_file: BinaryIO, to_file: BinaryIO) -> None:
-        from_file.seek(0)
-        to_file.seek(0, 2)
+    def write_file_with_offset(self, file: BinaryIO, offset: int, another_file: BinaryIO) -> None:
+        file.seek(offset)
+        another_file.seek(0)
 
         while True:
-            block = from_file.read(self.io_block_size)
+            block = another_file.read(self.io_block_size)
             if not block:
                 break
-            to_file.write(block)
+            file.write(block)
         pass
-
-    @staticmethod
-    def pad(file: BinaryIO) -> None:
-        file.seek(0, 2)
-        file_size = file.tell()
-        remainder_size = file_size % 1024**2
-        if remainder_size > 0:
-            padding_size = 1024**2 - remainder_size
-            file.write(bytes(padding_size))
 
 
 

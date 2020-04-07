@@ -1,6 +1,6 @@
 import subprocess
 from os.path import getsize
-from typing import Optional, List
+from typing import Optional
 
 
 class MakePartitionError(Exception):
@@ -17,9 +17,11 @@ class Partition(object):
                  min_size: int = 100) -> None:
         self.filesystem = filesystem
         self.directory = directory
-        self.size = size
         self.size_factor = size_factor
         self.min_size = min_size
+
+        self.start = 0
+        self.size = size
 
     def make(self, device: str) -> None:
         if self.directory:
