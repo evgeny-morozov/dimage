@@ -22,7 +22,6 @@ def test_make_partition_from_directory():
             p.make(f.name)
 
             size = getsize(f.name)
-            assert size <= 1024 * 60
             assert size % 1024 == 0
             subprocess.run(['fsck.ext2', '-p', f.name],
                            capture_output=True, check=True)

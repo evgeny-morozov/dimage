@@ -1,5 +1,4 @@
 import subprocess
-from os.path import getsize
 from typing import Optional
 
 
@@ -48,17 +47,9 @@ class Partition(object):
             except subprocess.CalledProcessError as e:
                 raise MakePartitionError(e.stderr.decode())
 
-            try:
-                subprocess.run([
-                    'resize2fs', '-M', device,
-                ], capture_output=True, check=True)
+            # shrinking with resize2fs -M can corrupt files =C
 
-            except subprocess.CalledProcessError as e:
-                raise MakePartitionError(e.stderr.decode())
-
-            self.size = getsize(device)
-            assert self.size % 1024 == 0
-            self.size //= 1024
+            self.size = size
 
         else:
             try:

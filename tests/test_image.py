@@ -25,7 +25,7 @@ def test_make_image():
     mib = 1024 ** 2
 
     with TemporaryDirectory() as d:
-        open(os.path.join(d, 'foobar'), 'wb').write(os.urandom(10 * mib))
+        open(os.path.join(d, 'foobar'), 'wb').write(os.urandom(9 * mib))
 
         image = Image([
             Partition('ext2', directory=d),
