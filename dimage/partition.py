@@ -41,6 +41,7 @@ class Partition(object):
                     'mke2fs',
                     '-t', self.filesystem,
                     '-d', self.directory,
+                    '-m', '0',
                     device, str(size),
                 ], capture_output=True, check=True)
 
