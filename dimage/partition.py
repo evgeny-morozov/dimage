@@ -23,7 +23,7 @@ class Partition(object):
         self.size = size
 
     def make(self, device: str) -> None:
-        if self.directory:
+        if not self.size:
             try:
                 du_output = subprocess.check_output(['du', '-sk', self.directory])
                 dir_size = int(du_output.split(b'\t')[0])
@@ -53,9 +53,17 @@ class Partition(object):
             self.size = size
 
         else:
+            dir_option = []
+
+            if self.directory:
+                dir_option = ['-d', self.directory]
+
             try:
                 subprocess.run([
-                    'mke2fs', '-t', self.filesystem, device, str(self.size),
+                    'mke2fs',
+                    '-t', self.filesystem,
+                    *dir_option,
+                    device, str(self.size),
                 ], capture_output=True, check=True)
 
             except subprocess.CalledProcessError as e:
